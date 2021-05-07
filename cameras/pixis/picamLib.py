@@ -32,7 +32,7 @@ from cameras.pixis.picam_types import *
 import sys
 
 # APPEND THE PICAM SDK Libarary Path
-sys.path.append('/home/rsw/pixis-master/Picam_SDK/pi/runtime')
+#sys.path.append('~/pixis-master/Picam_SDK/pi/runtime')
 
 
 # ##########################################################################################################
