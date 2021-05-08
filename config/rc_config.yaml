@@ -1,0 +1,32 @@
+default:
+  setTemperature: 10
+  ROI: [1, 2048, 1, 2048]
+  ActiveWidth: 2048
+  ActiveHeight: 2048
+  ActiveLeftMargin: 54
+  ActiveRightMargin: 50
+  ActiveTopMargin: 7
+  ActiveBottomMargin: 3
+  AdcSpeed: 2.0
+  AdcAnalogGain: "Medium"
+  AdcQuality: "LowNoise"
+  ExposureTime: 0
+  lastExposed: None
+  telescope: '60'
+  gain: -999
+  crpix1: -999
+  crpix2: -999
+  cdelt1: -999
+  cdelt2: -999
+  cdelt1_comment: ""
+  cdelt2_comment: ""
+  ctype1: 'RA---TAN'
+  ctype2: 'DEC--TAN'
+  shutter_dict:
+    normal: 'Normal'
+    closed: 'AlwaysClosed'
+    open: 'AlwaysOpen'
+  AdcSpeed_States: [.1, 2.0]
+  AdcAnalogGain_States: ['Low', 'Medium', 'High']
+  AdcQuality_States: ["LowNoise", "HighCapacity", "HighSpeed", "ElectronMultiplied" ]
+  lastError: ""

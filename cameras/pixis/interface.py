@@ -30,8 +30,9 @@ logger.info("Starting Logger: Logger file is %s", 'pixis_controller.log')
 
 
 class Controller:
-    def __init__(self, cam_prefix="rc", serial_number="test", output_dir="",
-                 force_serial=True, set_temperature=10, send_to_remote=False,
+    def __init__(self, config_file=None, cam_prefix="rc", serial_number="test",
+                 output_dir="",
+                 force_serial=True, set_temperature=-40, send_to_remote=False,
                  remote_config='nemea.config.json'):
         """
         Initialize the controller for the PIXIS camera and
@@ -41,51 +42,30 @@ class Controller:
         :param force_serial:
         :param set_temperature:
         """
+        if not config_file:
+            config_file = os.path.join(SR, 'config',
+                                       '%s_config.yaml' % cam_prefix)
 
+            with open(config_file) as df:
+                camera_params = yaml.load(df, Loader=yaml.FullLoader)
+            print("Updating values")
+            self.__dict__.update(camera_params['default'].items())
         self.camPrefix = cam_prefix
         self.serialNumber = serial_number
         self.outputDir = output_dir
         self.forceSerial = force_serial
         self.setTemperature = set_temperature
-        self.opt = None
-        self.ROI = [1, 2048, 1, 2048]
-        self.ActiveWidth = 2048
-        self.ActiveHeight = 2048
-        self.ActiveLeftMargin = 54
-        self.ActiveRightMargin = 50
-        self.ActiveTopMargin = 7
-        self.ActiveBottomMargin = 3
-        self.AdcSpeed = 2.0
-        self.AdcAnalogGain = "Medium"
-        self.AdcQuality = "LowNoise"
         self.ExposureTime = 0
         self.lastExposed = None
         self.telescope = '60'
         self.gain = -999
-        self.crpix1 = -999
-        self.crpix2 = -999
-        self.cdelt1 = -999
-        self.cdelt2 = -999
-        self.cdelt1_comment = ""
-        self.cdelt2_comment = ""
-        self.ctype1 = 'RA---TAN'
-        self.ctype2 = 'DEC--TAN'
+
         self.send_to_remote = send_to_remote
         if self.send_to_remote:
             with open(os.path.join(SR, 'config', remote_config)) as data_file:
                 params = json.load(data_file)
                 print(params, "params")
-            self.transfer = transfer(**params)
-        self.shutter_dict = {
-            'normal': 'Normal',
-            'closed': 'AlwaysClosed',
-            'open': 'AlwaysOpen',
-        }
-
-        self.AdcSpeed_States = [.1, 2.0]
-        self.AdcAnalogGain_States = ['Low', 'Medium', 'High']
-        self.AdcQuality_States = ["LowNoise", "HighCapacity", "HighSpeed",
-                                  "ElectronMultiplied"]
+            self.transfer = None #transfer(**params)
         self.lastError = ""
 
     def _set_output_dir(self):
@@ -416,9 +396,7 @@ class Controller:
 
 
 if __name__ == "__main__":
-    x = Controller(serial_number="", output_dir='C:/images', send_to_remote=True)
-    #y = Controller()
-    #y.initialize()
+    x = Controller(serial_number="", output_dir='/home/rsw/images', send_to_remote=False)
     if x.initialize():
         print("Camera initialized")
     else:
