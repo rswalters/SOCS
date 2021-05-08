@@ -13,13 +13,13 @@ default:
   ExposureTime: 0
   lastExposed: None
   telescope: '60'
-  gain: 1.77
-  crpix1: 1293
-  crpix2: 1280
-  cdelt1: -.00010944
-  cdelt2: -.00010944
-  cdelt1_comment: '.394"'
-  cdelt2_comment: '.394"'
+  gain: 1.78
+  crpix1: 1075
+  crpix2: 974
+  cdelt1: -2.5767E-06
+  cdelt2: -2.5767E-06
+  cdelt1_comment: ".00093"
+  cdelt2_comment: ".00093"
   ctype1: 'RA---TAN'
   ctype2: 'DEC--TAN'
   shutter_dict:

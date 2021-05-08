@@ -9,6 +9,7 @@ from astropy.io import fits
 import yaml
 import os
 
+
 SR = os.path.abspath(os.path.dirname(__file__)+'/../../')
 with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
     params = yaml.load(data_file, Loader=yaml.FullLoader)
@@ -30,7 +31,7 @@ logger.info("Starting Logger: Logger file is %s", 'pixis_controller.log')
 
 
 class Controller:
-    def __init__(self, config_file=None, cam_prefix="rc", serial_number="test",
+    def __init__(self, config_file=None, cam_prefix="rc", serial_number="",
                  output_dir="",
                  force_serial=True, set_temperature=-40, send_to_remote=False,
                  remote_config='nemea.config.json'):
@@ -42,14 +43,15 @@ class Controller:
         :param force_serial:
         :param set_temperature:
         """
+
+        # Load the default variables
         if not config_file:
             config_file = os.path.join(SR, 'config',
                                        '%s_config.yaml' % cam_prefix)
-
             with open(config_file) as df:
                 camera_params = yaml.load(df, Loader=yaml.FullLoader)
-            print("Updating values")
             self.__dict__.update(camera_params['default'].items())
+
         self.camPrefix = cam_prefix
         self.serialNumber = serial_number
         self.outputDir = output_dir
@@ -57,20 +59,16 @@ class Controller:
         self.setTemperature = set_temperature
         self.ExposureTime = 0
         self.lastExposed = None
-        self.telescope = '60'
-        self.gain = -999
+        self.opt = None
 
         self.send_to_remote = send_to_remote
         if self.send_to_remote:
-            with open(os.path.join(SR, 'config', remote_config)) as data_file:
-                params = json.load(data_file)
-                print(params, "params")
             self.transfer = None #transfer(**params)
         self.lastError = ""
 
     def _set_output_dir(self):
         """
-        Keep data seperated by utdate.  Unless saveas is defined all
+        Keep data separated by utdate.  Unless saveas is defined all
         files will be saved in a utdate directory in the output directory.
         :return: str output directory path
         """
@@ -98,7 +96,8 @@ class Controller:
         """
         Set the parameters.  The return is the calculated readout time
         based on the active parameters.
-        :return:
+        parameters: dictionary of Camera properties
+        return: readout time in milliseconds
         """
 
         for param in parameters:
@@ -109,15 +108,14 @@ class Controller:
 
         return self.opt.getParameter("ReadoutTimeCalculation")
 
-    def initialize(self, path_to_lib="", wait_to_cool=True):
+    def initialize(self, path_to_lib=""):
         """
         Initialize the library and connect the cameras.  When no camera
         is detected the system opens a demo cam up for testing.
 
         :param path_to_lib: Location of the dll or .so library
-        :param wait_to_cool: If true then wait in this function until
         the camera is at it's set temperature
-        :return:
+        :return: Bool (True if no errors)
         """
 
         # Initialize and load the PICAM library
@@ -129,7 +127,7 @@ class Controller:
             self.lastError = str(e)
             logger.error("Fatal error in main loop", exc_info=True)
             return False
-        logger.info("Finished loading libary")
+        logger.info("Finished loading library")
         logger.info("Getting available cameras")
 
         # Get the available cameras and try to select the one desired by the
@@ -154,9 +152,7 @@ class Controller:
         try:
             self.opt.connect(pos)
         except Exception as e:
-            print("ERROR")
             self.lastError = str(e)
-
             logger.info("Unable to connect to camera:%s", self.serialNumber)
             logger.error("Connection error", exc_info=True)
             return False
@@ -171,19 +167,19 @@ class Controller:
 
         temp = self.opt.getParameter("SensorTemperatureReading")
         lock = self.opt.getParameter("SensorTemperatureStatus")
-        if wait_to_cool:
-            while temp != self.setTemperature:
-                logger.debug("Dector temp at %sC", temp)
-                print(temp, lock)
-                time.sleep(5)
-                temp = self.opt.getParameter("SensorTemperatureReading")
-                lock = self.opt.getParameter("SensorTemperatureStatus")
+
+        while temp != self.setTemperature:
+            logger.debug("Dector temp at %sC", temp)
+            print(temp, lock)
+            time.sleep(1)
+            temp = self.opt.getParameter("SensorTemperatureReading")
+            lock = self.opt.getParameter("SensorTemperatureStatus")
 
         while lock != 2:
             print(temp, lock)
             logger.debug("Wait for temperature lock to be set")
             lock = self.opt.getParameter("SensorTemperatureStatus")
-            time.sleep(10)
+            time.sleep(1)
             logger.info("Camera temperature locked in place. Continuing "
                         "initialization")
 
@@ -222,31 +218,6 @@ class Controller:
                 self.lastError = "Image directory does not exists"
                 logger.error("Image directory %s does not exists", self.outputDir)
                 return False
-
-        # Set the camera properties
-        if self.camPrefix == 'rc':
-            self.crpix1 = 1293
-            self.crpix2 = 1280
-            self.cdelt1 = -0.00010944
-            self.cdelt2 = -0.00010944
-            self.cdelt1_comment = '.394"'
-            self.cdelt2_comment = '.394"'
-            self.gain = 1.77
-        elif self.camPrefix == 'ifu':
-            self.gain = 1.78
-            self.crpix1 = 1075
-            self.crpix2 = 974
-            self.cdelt1 = -2.5767E-06
-            self.cdelt2 = -2.5767E-06
-            self.cdelt1_comment = ".00093"
-            self.cdelt2_comment = ".00093"
-        else:
-            self.crpix1 = 1293
-            self.crpix2 = 1280
-            self.cdelt1 = -0.00010944
-            self.cdelt2 = -0.00010944
-            self.cdelt1_comment = '.394"'
-            self.cdelt2_comment = '.394"'
         return True
 
     def get_status(self):
@@ -258,7 +229,7 @@ class Controller:
                     'camtemp': self.opt.getParameter("SensorTemperatureReading"),
                     'camspeed': self.opt.getParameter("AdcSpeed"),
                     'state': self.opt.getParameter("OutputSignal")
-                    }
+            }
             logger.info(status)
             return status
         except Exception as e:
@@ -268,11 +239,23 @@ class Controller:
                 "camtemp": -9999, "camspeed": -999
             }
 
-    def get_camera_state(self):
-        self.opt.getParameter()
+    def get_camera_state(self, parameter):
+        """Get the camera state"""
+        return self.opt.getParameter(parameter)
 
     def take_image(self, shutter='normal', exptime=0.0,
                    readout=2.0, save_as="", timeout=None):
+        """
+        Set the camera parameters and then start the exposure sequence
+
+        :param shutter:
+        :param exptime:
+        :param readout:
+        :param save_as:
+        :param timeout:
+        :return: A dictionary with the path of the file or error message
+                along with the elapsed time
+        """
 
         s = time.time()
         parameter_list = []
@@ -326,7 +309,6 @@ class Controller:
 
         # 6. Get the exposure start time to use for the naming convention
         start_time = datetime.datetime.utcnow()
-
         self.lastExposed = start_time
         logger.info("Starting %(camPrefix)s exposure",
                     {'camPrefix': self.camPrefix})
@@ -338,6 +320,7 @@ class Controller:
             return {'elaptime': -1*(time.time()-s),
                     'error': "Failed to gather data from camera",
                     'send_alert': True}
+
         logger.info("Readout completed")
         logger.debug("Took: %s", time.time() - s)
 
@@ -392,15 +375,17 @@ class Controller:
         except Exception as e:
             self.lastError = str(e)
             logger.error("Error writing data to disk", exc_info=True)
-            return {'elaptime': time.time()-s, 'error': 'Error writing file to disk'}
+            return {'elaptime': -1*(time.time()-s),
+                    'error': 'Error writing file to disk:' % str(e)}
 
 
 if __name__ == "__main__":
-    x = Controller(serial_number="", output_dir='/home/rsw/images', send_to_remote=False)
+    x = Controller(cam_prefix='ifu', output_dir='/home/rsw/images', send_to_remote=False)
     if x.initialize():
         print("Camera initialized")
     else:
         print("I need to handle this error")
+        print(x.lastError)
     for i in range(1):
         #print(y.take_image(exptime=0, readout=2.0))
         print(x.take_image(exptime=0, readout=2))
