@@ -7,7 +7,6 @@ from cameras.pixis import interface as pixis
 from utils.message_server import (message_handler, response_handler,
                                   error_handler)
 from utils.sedmlogging import setup_logger
-
 import yaml
 
 # Open the config file
