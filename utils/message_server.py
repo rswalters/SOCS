@@ -67,6 +67,7 @@ def message_handler(incoming_connection, starttime=0.0):
                                    inputdata='NA',
                                    return_type='json')
         # Send reply back to incoming address and exit the loop
+
         incoming_connection.sendall(error_dict)
         return False
 
@@ -93,7 +94,7 @@ def message_handler(incoming_connection, starttime=0.0):
                                    inputdata=data,
                                    return_type='json')
         # Send reply back to incoming address and exit the loop
-        incoming_connection.sendall(error_dict)
+        incoming_connection.sendall(error_dict.encode('utf-8'))
         return False
 
     # 4. Check that we have an incoming command
