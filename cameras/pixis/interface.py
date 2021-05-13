@@ -38,7 +38,6 @@ class Controller:
             self.__dict__.update(camera_params['default'].items())
 
         self.camPrefix = cam_prefix
-        self.serialNumber = serial_number
         self.outputDir = output_dir
         self.forceSerial = force_serial
         self.setTemperature = set_temperature
@@ -121,16 +120,20 @@ class Controller:
         camera_list = [camera.decode('utf-8') for camera in camera_list]
         logger.info("Available Cameras:%s", camera_list)
         if self.serialNumber:
-            try:
-                pos = camera_list.index(self.serialNumber)
-            except Exception as e:
-                self.lastError = str(e)
-                logger.error("Camera %s is not in list", self.serialNumber, exc_info=True)
-                return False
+            if not self.forceSerial:
+                try:
+                    pos = camera_list.index(self.serialNumber)
+                except Exception as e:
+                    self.lastError = str(e)
+                    logger.error("Camera %s is not in list", self.serialNumber, exc_info=True)
+                    return False
+            else:
+                pos = None
         else:
             logger.info("No serial number given, using demo cam")
             pos = None
             self.serialNumber = 'Demo'
+
         logger.info("Connecting '%s' camera", self.serialNumber)
 
         # Connect the camera for operations
@@ -144,7 +147,7 @@ class Controller:
 
         # Set the operating temperature and wait to cool the instrument
         # before continuing. We wait for this cooling to occur because
-        # past expereince has shown working with the cameras during the
+        # past experience has shown working with the cameras during the
         # cooling cycle can cause issues.
         logger.info("Setting temperature to: %s", self.setTemperature)
         self.opt.setParameter("SensorTemperatureSetPoint", self.setTemperature)
