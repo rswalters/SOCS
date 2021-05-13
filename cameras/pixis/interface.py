@@ -1,38 +1,23 @@
 import time
 import datetime
 from cameras.pixis.picamLib import *
-import logging
-from logging.handlers import TimedRotatingFileHandler
-import json
 from astropy.io import fits
 #from utils.transfer_to_remote import transfer
 import yaml
 import os
-
+from utils.sedmlogging import setup_logger
 
 SR = os.path.abspath(os.path.dirname(__file__)+'/../../')
 with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
     params = yaml.load(data_file, Loader=yaml.FullLoader)
 
-logger = logging.getLogger("pixisLogger")
-logger.setLevel(logging.DEBUG)
-logging.Formatter.converter = time.gmtime
-formatter = logging.Formatter("%(asctime)s--%(name)s--%(levelname)s--"
-                              "%(module)s--%(funcName)s--%(message)s")
-
+name = "pixisLogger"
 logfile = os.path.join(params['logging']['logpath'], 'pixis_controller.log')
-logHandler = TimedRotatingFileHandler(logfile, when='midnight', utc=True,
-                                      interval=1, backupCount=360)
-
-logHandler.setFormatter(formatter)
-logHandler.setLevel(logging.DEBUG)
-logger.addHandler(logHandler)
-logger.info("Starting Logger: Logger file is %s", 'pixis_controller.log')
-
+logger = setup_logger(name, logfile)
 
 class Controller:
     def __init__(self, config_file=None, cam_prefix="rc", serial_number="",
-                 output_dir="",
+                 output_dir="", parseport=5001,
                  force_serial=True, set_temperature=-40, send_to_remote=False,
                  remote_config='nemea.config.json'):
         """
@@ -44,7 +29,7 @@ class Controller:
         :param set_temperature:
         """
 
-        # Load the default variables
+        # Load the default parameters from config file
         if not config_file:
             config_file = os.path.join(SR, 'config',
                                        '%s_config.yaml' % cam_prefix)
@@ -60,7 +45,7 @@ class Controller:
         self.ExposureTime = 0
         self.lastExposed = None
         self.opt = None
-
+        self.parseport = parseport
         self.send_to_remote = send_to_remote
         if self.send_to_remote:
             self.transfer = None #transfer(**params)
