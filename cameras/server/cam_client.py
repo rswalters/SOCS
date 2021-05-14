@@ -1,6 +1,7 @@
 import socket
 import time
 import json
+from utils.message_client import send_message
 
 
 class Camera:
@@ -26,35 +27,10 @@ class Camera:
         :param timeout: timeout in seconds for waiting for a command
         :return: Tuple (bool,string)
         """
-        start = time.time()
-        try:
-            if timeout:
-                self.socket.settimeout(timeout)
-
-            if parameters:
-                send_str = json.dumps({'command': cmd,
-                                       'parameters': parameters})
-            else:
-                send_str = json.dumps({'command': cmd})
-                
-            self.socket.send(b"%s" % send_str.encode('utf-8'))
-
-            if return_before_done:
-                return {"elaptime": time.time()-start,
-                        "data": "exiting the loop early"}
-
-            data = self.socket.recv(2048)
-            counter = 0
-            while not data:
-                time.sleep(.01)
-                data = self.socket.recv(2048)
-                counter += 1
-                if counter > 100:
-                    break
-            return json.loads(data.decode('utf-8'))
-        except Exception as e:
-            return {'elaptime': time.time()-start,
-                    'error': str(e)}
+        return send_message(self.socket, cmd=cmd, parameters=parameters,
+                            timeout=timeout,
+                            return_before_done=return_before_done,
+                            start=time.time())
 
     def initialize(self):
         return self.__send_command(cmd="INITIALIZE")
