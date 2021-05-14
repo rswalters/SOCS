@@ -1,4 +1,5 @@
 default:
+  serialNumber: "05313416"
   setTemperature: 10
   ROI: [1, 2048, 1, 2048]
   ActiveWidth: 2048
