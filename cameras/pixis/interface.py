@@ -15,6 +15,7 @@ name = "pixisLogger"
 logfile = os.path.join(params['logging']['logpath'], 'pixis_controller.log')
 logger = setup_logger(name, logfile)
 
+
 class Controller:
     def __init__(self, config_file=None, cam_prefix="rc", serial_number="",
                  output_dir="", parseport=5001,
@@ -120,15 +121,15 @@ class Controller:
         camera_list = [camera.decode('utf-8') for camera in camera_list]
         logger.info("Available Cameras:%s", camera_list)
         if self.serialNumber:
-            if not self.forceSerial:
+            if self.forceSerial:
+                pos = None
+            else:
                 try:
                     pos = camera_list.index(self.serialNumber)
                 except Exception as e:
                     self.lastError = str(e)
                     logger.error("Camera %s is not in list", self.serialNumber, exc_info=True)
                     return False
-            else:
-                pos = None
         else:
             logger.info("No serial number given, using demo cam")
             pos = None
