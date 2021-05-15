@@ -15,9 +15,15 @@ def error_handler(msg, starttime=0.0, inputdata=None, return_type='json',
     """
 
     if return_type == 'json':
-        return json.dumps({"elaptime": time.time() - starttime,
-                           "input": inputdata,
-                           "error": "error message %s" % msg})
+        ret = json.dumps({"elaptime": time.time() - starttime,
+                          "input": inputdata,
+                          "error": "error message %s" % msg})
+
+        if incoming_connection:
+            incoming_connection.sendall(ret)
+            print("I am still in the loop")
+        else:
+            return ret
 
 
 def response_handler(msg, starttime=0.0, inputdata=None, return_type='json',
@@ -73,11 +79,11 @@ def message_handler(incoming_connection, starttime=0.0):
 
     # 2. Verify that the incoming command has valid data
     if not data:
-        error_dict = error_handler("No data was received",
-                                   starttime=starttime,
-                                   inputdata='NA')
+        error_handler("No data was received",
+                      starttime=starttime,
+                      inputdata='NA',
+                      incoming_connection=incoming_connection)
 
-        #incoming_connection.sendall(error_dict)
         return False
 
     # 3. Now check that the data is in the proper format with a command

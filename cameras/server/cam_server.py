@@ -10,7 +10,7 @@ from utils.sedmlogging import setup_logger
 import yaml
 
 # Open the config file
-SR = os.path.abspath(os.path.dirname(__file__)+'/../../')
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../')
 with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
     params = yaml.load(data_file, Loader=yaml.FullLoader)
 
@@ -71,13 +71,11 @@ class CamServer:
                     # If no data was returned or it was False then we should
                     # check to see what the last error was on the camera
                     if not ret:
-                        error_dict = error_handler('Problem initializing '
-                                                   'camera: %s' %
-                                                   self.cam.lastError,
-                                                   inputdata=data,
-                                                   starttime=starttime)
-                        connection.sendall(error_dict)
-                        print("I am still in the loop")
+                        error_handler('Problem initializing camera: %s' %
+                                      self.cam.lastError,
+                                      inputdata=data,
+                                      starttime=starttime,
+                                      incoming_connection=connection)
                         break
                 else:
                     ret = 'Camera already initialized'
