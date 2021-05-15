@@ -80,7 +80,7 @@ class CamServer:
                         print("I am still in the loop")
                         break
                 else:
-                    ret = 'Camera already inintailzed'
+                    ret = 'Camera already initialized'
             elif data['command'].upper() == 'TAKE_IMAGE':
                 print("Taking an image")
                 ret = self.cam.take_image(**data['parameters'])
@@ -124,7 +124,7 @@ class CamServer:
         self.socket.listen(5)
 
         while True:
-            if os.path.exists('/home/rsw/cam_stop.txt'):
+            if os.path.exists(params['commands']['stop_file']):
                 break
             conn, address = self.socket.accept()
             logger.debug("Got connection from %s:%s" % (conn, address))

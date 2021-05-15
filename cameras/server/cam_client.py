@@ -72,5 +72,4 @@ if __name__ == '__main__':
                         return_before_done=False))
     print(rc.status())
     print(rc.status())
-    print(rc.shutdown())
     print(rc.socket.close())
