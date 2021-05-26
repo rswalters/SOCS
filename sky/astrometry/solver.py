@@ -6,6 +6,11 @@ from astropy import units as u
 import subprocess
 import time
 
+# TODO Move the default parameters to the config file for easier
+#  updates in the future
+
+# TODO Add logging
+
 
 def solve_astrometry(img, radius=2.5, with_pix=True, downsample=False,
                      tweak=3, make_plots=False, repeat=True,
@@ -40,6 +45,7 @@ def solve_astrometry(img, radius=2.5, with_pix=True, downsample=False,
     try:
         ra, dec = image_header['OBJRA'], image_header['OBJDEC']
     except Exception as e:
+        print(str(e))
         ra, dec = image_header['RA'], image_header['DEC']
 
     # 2. Create the solved astronomy base name
