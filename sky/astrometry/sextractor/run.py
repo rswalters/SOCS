@@ -213,7 +213,7 @@ class Sextractor:
             # stars that are below our ellipse constraint
             df = df[(df['FLAGS'] == 0) & (df['ELLIPTICITY'] < ellip_constraint)]
 
-            # Reject any the FWHM of any outliers
+            # Reject any the FWHM outliers
             d = self._reject_outliers(df['FWHM_IMAGE'].values)
 
             # TODO determine where the .49 value came from?  It should be the
@@ -222,13 +222,11 @@ class Sextractor:
 
             df = df.sort_values(by=['MAG_BEST'])
             df = df[0:5]
+        else:
+            avgfwhm = np.median(df['FWHM_IMAGE'].values) * .49
 
-            if create_region_file:
-                self._create_region_file(catalog, df)
-
-        print(df['FWHM_IMAGE'].values)
-        fwhm = np.median(df['FWHM_IMAGE'].values) * .49
-        print(fwhm)
+        if create_region_file:
+            self._create_region_file(catalog, df)
 
         return avgfwhm
 
@@ -306,14 +304,18 @@ class Sextractor:
             # 9. Finally get the stats for the image
             catalog_field_list.append(df[catalog_field].mean())
             error_list.append(df.loc[:, catalog_field].std())
-            
+
+        # Convert list to numpy arrays in order to run numpy functions on them
         catalog = np.array(catalog_field_list)
         header = np.array(header_field_list)
         std_catalog = np.array(error_list)
-    
+
+        # Get the number of values in the catalog
         n = len(catalog)
-        print(n, catalog, 'test')
+
+        # Find the best fwhm value
         best_seeing_id = np.nanargmin(catalog)
+
         # We will take 4 datapoints on the left and right of the best value.
         selected_ids = np.arange(-4, 5, 1)
         selected_ids = selected_ids + best_seeing_id
@@ -330,7 +332,8 @@ class Sextractor:
         std_catalog = std_catalog[selected_ids]
     
         std_catalog = np.maximum(1e-5, np.array(std_catalog))
-    
+
+        # Get the polynomial fit coefficients
         coefs = np.polyfit(header, catalog, w=1 / std_catalog, deg=2)
     
         x = np.linspace(np.min(header), np.max(header), 10)
