@@ -1,7 +1,5 @@
 import os
-import logging
 import json
-from logging.handlers import TimedRotatingFileHandler
 import time
 import socket
 import threading
@@ -36,7 +34,7 @@ class SkyServer:
         self.do_connect = do_connect
         self.scheduler = None #dbscheduler.Scheduler()
         self.growth = marshal.interface()
-        self.guider = rcguider.guide(do_connect=do_connect)
+        self.guider = rcguider.Guide(do_connect=do_connect)
 
     def handle(self, connection, address):
         while True:
@@ -59,7 +57,7 @@ class SkyServer:
                     self.sex = run.Sextractor()
                     self.scheduler = dbscheduler.Scheduler()
                     self.growth = marshal.interface()
-                    self.guider = rcguider.guide(do_connect=self.do_connect)
+                    self.guider = rcguider.Guide(do_connect=self.do_connect)
                     ret = {'elaptime': time.time()-starttime,
                                 'data': 'System reinitialized'}
                 elif data['command'].upper() == 'GETCALIBREQUESTID':
@@ -77,7 +75,7 @@ class SkyServer:
                     ret = self.scheduler.get_next_observable_target(**data['parameters'])
                 elif data['command'].upper() == 'PING':
                     ret = {'elaptime': time.time()-starttime,
-                                'data': 'PONG'}
+                            'data': 'PONG'}
                 elif data['command'].upper() == "UPDATEGROWTH":
                     ret = self.growth.update_growth_status(**data['parameters'])
                 elif data['command'].upper() == "UPDATEREQUEST":
