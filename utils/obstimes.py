@@ -31,7 +31,7 @@ def get_science_times(start=None, print_values=False, return_type="dict"):
     :param print_values:
     :param return_type:
     :param start:3660
-    :return:
+    :return: dictionary of alamanac times for twilight
     """
     # Start out by assuming it's the current date
     next_day = False
@@ -85,4 +85,6 @@ def get_science_times(start=None, print_values=False, return_type="dict"):
     else:
         return times
 
-get_science_times(start=None, print_values=True, return_type="dict")
+
+if __name__ == "__main__":
+    get_science_times(start=None, print_values=True, return_type="dict")
