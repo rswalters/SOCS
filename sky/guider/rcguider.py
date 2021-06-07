@@ -10,10 +10,8 @@ import socket
 import pandas as pd
 from photutils import centroid_sources, centroid_2dg
 from astropy.io import fits
-#from observatory.server import ocs_client
 
-
-class guide:
+class Guide:
     def __init__(self, config_file='', data_dir='images/',
                  max_move=1, min_move=.05, ip="10.200.100.2",
                  do_connect=False, port=49300):
@@ -51,7 +49,7 @@ class guide:
         data = ascii.read(catalog)
 
         df = data.to_pandas()
-        print("HERER")
+
         if do_filter:
             df = df[(df['X_IMAGE'] > 50) & (df['X_IMAGE']) < 2000]
             print(df, '12')
@@ -431,7 +429,7 @@ class guide:
 
 
 if __name__ == "__main__":
-    x = guide(do_connect=False)
+    x = Guide(do_connect=False)
     start = datetime.datetime.strptime("20191211_10_55_14", "%Y%m%d_%H_%M_%S")
     end = datetime.datetime.strptime("20191211_11_28_36", "%Y%m%d_%H_%M_%S")
     x.start_guider(start, end, debug=True, create_region_file=True, data_dir='/data2/sedm/20191211/')
