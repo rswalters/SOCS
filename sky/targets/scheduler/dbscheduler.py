@@ -10,7 +10,7 @@ import os
 import psycopg2.extras
 import psycopg2
 import time
-#from utils import obstimes
+from utils import obstimes
 #from utils import sedmpy_import
 import sqlite3
 from sky.targets.marshals.growth.marshal import interface
@@ -20,6 +20,9 @@ SITE_ROOT = os.path.abspath(os.path.dirname(__file__)+'/../..')
 
 # noinspection SqlNoDataSourceInspection
 class Scheduler:
+    """
+    Nightly scheduler for SEDm. Meant to connect to a back end database
+    """
     def __init__(self, config='schedulerconfig.json',
                  site_name='Palomar', obsdatetime=None,
                  save_as="targets.json"):
