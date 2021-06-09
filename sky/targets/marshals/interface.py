@@ -3,10 +3,46 @@ import glob
 import requests
 import time
 import json
+import yaml
+
+
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../../')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
+
+
+def api(method, endpoint, data=None, json_file=None, marshal_id=0):
+    """
+    Act as
+    :param json_file:
+    :param method:
+    :param endpoint:
+    :param data:
+    :param marshal_id:
+    :return:
+
+    """
+
+    if marshal_id >= 1:
+        headers = {'Authorization': 'token {}'.format(params['marshals']['fritz']['token'])}
+        response = requests.request(method, endpoint, json=data,
+                                    headers=headers)
+    else:
+        response = requests.post(endpoint,
+                                 files={'jsonfile': json_file},
+                                 auth=(params['marshals']['growth']['user'],
+                                 params['marshals']['growth']['password']))
+
+    print('HTTP code: {}, {}'.format(response.status_code, response.reason))
+    if response.status_code in (200, 400):
+        print(response.text)
+
+    return response
 
 
 def get_marshal_id_from_pharos(request_id):
     """
+    Get the marshal id from the pharos website
 
     :param request_id:
     :return:
@@ -15,74 +51,16 @@ def get_marshal_id_from_pharos(request_id):
     payload = {'request_id': request_id}
     headers = {'content-type': 'application/json'}
     json_data = json.dumps(payload)
-    response = requests.post(self.pharos_url, data=json_data,
+    response = requests.post(params['marshal']['pharos'], data=json_data,
                              headers=headers)
     ret = json.loads(response.text)
+
     if 'error' in ret:
         return {'elaptime': time.time() - start,
                 'error': 'Error getting the growth id'}
     else:
         return {'elaptime': time.time() - start,
                 'data': ret['marshal_id']}
-
-
-def update_growth_status(self, growth_id=None, request_id=None,
-                         message="PENDING"):
-    """
-
-    :param growth_id:
-    :param request_id:
-    :param message:
-    :return:
-    """
-    start = time.time()
-    if not growth_id and not request_id:
-        return {"elaptime": time.time() - start,
-                "error": "No growth id or request id given"}
-
-    if not growth_id and request_id:
-        ret = self.get_marshal_id_from_pharos(request_id)
-        if 'error' in ret:
-            return ret
-        else:
-            growth_id = ret['data']
-
-    if not growth_id or not isinstance(growth_id, int):
-        return {'elaptime': time.time() - start,
-                'error': growth_id}
-
-    # If we make it to this step then we should have a valid growth marshal target
-
-    status_config = {
-        'instrument_id': self.instrument_id,
-        'request_id': growth_id,
-        'new_status': message
-    }
-
-    out_file = open('json_file.txt', 'w')
-    out_file.write(json.dumps(status_config))
-    out_file.close()
-
-    json_file = open('json_file.txt', 'r')
-
-    ret = requests.post(self.growth_url, auth=(self.user, self.passwd),
-                        files={'jsonfile': json_file})
-
-    json_file.close()
-
-    return {'elaptime': time.time() - start,
-            'data': ret.status_code}
-
-
-def api(method, endpoint, data=None):
-    headers = {'Authorization': 'token {}'.format(token)}
-    response = requests.request(method, endpoint, json=data, headers=headers)
-    print('HTTP code: {}, {}'.format(response.status_code, response.reason))
-    if response.status_code in (200, 400):
-        print(response.text)
-        #print('JSON response: {}'.format(response.json()))
-
-    return response
 
 
 def update_status_request(status, request_id, marshal_name, save=False,
@@ -92,13 +70,13 @@ def update_status_request(status, request_id, marshal_name, save=False,
     not been deleted. The new status will show up on the status section
     of the request on the growth marshal.
 
-    :param status:
-    :param request_id:
-    :param marshal_name:
-    :param save:
-    :param output_file:
-    :param testing:
-    :return:
+    :param status: string with new update status
+    :param request_id: request id in the pharos database
+    :param marshal_name: string with marshal endpoint
+    :param save: save the update json file
+    :param output_file: file name if save is true
+    :param testing: only print out request and not send to external marshal
+    :return: dict with elapsed time and http status return
     """
 
     # 1. Get the instrument id
@@ -137,7 +115,7 @@ def update_status_request(status, request_id, marshal_name, save=False,
         print(status_payload)
     else:
         ret = api("POST", params["marshals"][marshal_name]['status_url'],
-                  data=status_payload).json()
+                  data=status_payload, json_file=output_file).json()
         if 'success' in ret['status']:
             print('Status for request %d updated to %s' % (request_id, status))
         else:
