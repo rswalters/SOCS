@@ -11,11 +11,15 @@ import pandas as pd
 from photutils import centroid_sources, centroid_2dg
 from astropy.io import fits
 
+
 class Guide:
     def __init__(self, config_file='', data_dir='images/',
                  max_move=1, min_move=.05, ip="10.200.100.2",
                  do_connect=False, port=49300):
         """
+        A mixed guider program that uses sextractor catalogs and
+        IRAF centroid sources function to refine positions for
+        stars in a fits image.
 
         :param config_file:
         :param data_dir:
@@ -38,17 +42,36 @@ class Guide:
 
     def _get_catalog_positions(self, catalog, do_filter=True,
                                ellip_constraint=.2):
+        """
+        Filter stars in the sextractor catalog to remove stars
+        that are too close to the edges of the ccd and the
+        shadowing of the crosshair in the RC images.  Return the
+        data in a pandas dataframe
+
+        :param catalog: sextractor catalog file path or fits image path
+        :param do_filter: apply constraints by ellipticity
+        :param ellip_constraint: elliptisity constraint.
+                                 0 --> circluar 1--> ellipised
+        :return: pandas dataframe
+        """
 
         # Read in the sextractor catalog and convert to dataframe
+
+        # If the input path is a fits file then run sextractor command to
+        # get the catalog file
         if catalog[-4:] == 'fits':
             ret = self.extractor.run(catalog)
-            #print(ret)
+
             if 'data' in ret:
                 catalog = ret['data']
 
+        # Read in the catalog to ascii to covert to a pandas dataframe
         data = ascii.read(catalog)
-
         df = data.to_pandas()
+
+        # Filter the data by the RC cross hair region and by the edge of
+        # the ccd.  In addition apply a constraint to only use round circular
+        # stars and filter out galaxies.
 
         if do_filter:
             df = df[(df['X_IMAGE'] > 50) & (df['X_IMAGE']) < 2000]
@@ -71,12 +94,28 @@ class Guide:
         return points[cdist([point], points).argmin()]
 
     def _reject_outliers(self, data, m=.5):
+        """
+        Reject outlies in a set of data
+        https://stackoverflow.com/questions/11686720/is-there-a-numpy-builtin-to-reject-outliers-from-a-list
+        :param data: numpy array
+        :param m: deviation value
+        :return: filter data array
+        """
         return data[abs(data - np.mean(data)) < m * np.std(data)]
 
-    def detect_outlier(self, data_x, data_y, return_index=False):
+    def detect_outlier(self, data_x, data_y, return_index=False,
+                       threshold=1.5):
+        """
+        Find outliers that fall outside the threshold
+        :param threshold: rejection value
+        :param data_x: list of x offsets
+        :param data_y: list of y offsets
+        :param return_index: return the index points to be removed
+        :return: return the new list with outliers rejected
+        """
         outliers_x = []
         outliers_y = []
-        threshold = 1.5
+
 
         # start with x rejection points
         mean_x = np.mean(data_x)
@@ -112,36 +151,57 @@ class Guide:
 
     def generate_region_file(self, catalog):
         """
-
+        Greate a region file from a sextractor catalog
         :param catalog:
         :return:
         """
-
+        df = ''
         if isinstance(catalog, str):
             df = self._get_catalog_positions(catalog)
         elif isinstance(catalog, pd.DataFrame):
             df = catalog
+
+        return df
 
     def start_guider(self, start_time=None, end_time=None, exptime=30,
                      image_prefix="rc", max_move=None, min_move=None,
                      data_dir=None, debug=False, create_region_file=False,
                      wait_time=5):
         """
+        Main guider function.  The guider program monitors for new image
+        files. When the first file is detected the script creates origin
+        points from sextractor.  All subsequent images then have a
+        2D guassian centroid fit applied to that point.  The new centroid
+        point is then subtracted from the original to find the needed
+        offset.  The pixel scale is then applied and RA and DEC offsets
+        are sent to the telescope in order to align the telescope again
+        with the first file. The loop runs until the end time is reached.
+        If in debug mode then all the images in the range of time are
+        reduced at once.  No corrections are applied in debug mode.
 
-        :param start_time:
-        :param end_time:
-        :param exptime:
-        :param image_prefix:
-        :param max_move:
-        :param min_move:
+
+        :param start_time: datetime start
+        :param end_time: datetime end
+        :param exptime: exposure time for the IFU image
+        :param image_prefix: prefix for images to monitor
+        :param max_move: maximum offsets allowed
+        :param min_move: minimum offsets allowed
+        :param data_dir: file path for the directory where new files are
+                         created
+        :param debug: when true the script will run through all the images
+                      between start and end times with no offsets applied
+        :param create_region_file: create a region file of the guider stars
+        :param wait_time: time to wait until to check for the next image
         :return:
         """
         start = time.time()
+
         # 1. Setup constraints
         if not max_move:
             max_move = self.max_move
         if not min_move:
             min_move = self.min_move
+
         first_image = None
         first_positions_df = None
 
@@ -175,7 +235,7 @@ class Guide:
             print("Looking in", os.path.join(data_dir, image_prefix + "*.fits"))
 
             images = sorted(glob.glob(os.path.join(data_dir, image_prefix + "*.fits")))
-            #print(images)
+
             for img in images:
                 base = os.path.basename(img)
                 obstime = base.replace(image_prefix, "").split(".")[0]
@@ -420,7 +480,8 @@ class Guide:
                         #data = self.socket.recv(2048)
                         #print(data)
                     print(cmd, "cmd")
-                    log.write("%s,%s,%s\n" % (obstime_str, round(np.median(x_offset), 3), round(np.median(y_offset), 3)))
+                    log.write("%s,%s,%s\n" % (obstime_str, round(np.median(x_offset), 3),
+                                              round(np.median(y_offset), 3)))
                 else:
                     already_processed_list.append(img)
                     continue
