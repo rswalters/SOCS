@@ -7,8 +7,10 @@ from sky.astrometry import solver
 from sky.targets.scheduler import dbscheduler
 from sky.astrometry.sextractor import run
 from sky.guider import rcguider
+from sky.targets.marshals import interface
 from sky.targets.marshals.growth import marshal
 import yaml
+
 from utils.sedmlogging import setup_logger
 from utils.message_server import (message_handler, response_handler,
                                   error_handler)
@@ -33,13 +35,14 @@ class SkyServer:
         self.sex = run.Sextractor()
         self.do_connect = do_connect
         self.scheduler = None #dbscheduler.Scheduler()
-        self.growth = marshal.interface()
+        self.marshals = marshal.interface()
         self.guider = rcguider.Guide(do_connect=do_connect)
 
     def handle(self, connection, address):
         while True:
             starttime = time.time()
             data = message_handler(connection, starttime=starttime)
+            ret = ''
             logger.info("Data Received: %s", data)
 
             # Check the data return if it's False then there was an error and
@@ -56,7 +59,7 @@ class SkyServer:
                 elif data['command'].upper() == 'REINT':
                     self.sex = run.Sextractor()
                     self.scheduler = dbscheduler.Scheduler()
-                    self.growth = marshal.interface()
+                    self.marshals = interface
                     self.guider = rcguider.Guide(do_connect=self.do_connect)
                     ret = {'elaptime': time.time()-starttime,
                                 'data': 'System reinitialized'}
@@ -77,20 +80,23 @@ class SkyServer:
                     ret = {'elaptime': time.time()-starttime,
                             'data': 'PONG'}
                 elif data['command'].upper() == "UPDATEGROWTH":
-                    ret = self.growth.update_growth_status(**data['parameters'])
+                    ret = self.marshals.update_status_request(**data['parameters'])
                 elif data['command'].upper() == "UPDATEREQUEST":
                     ret = self.scheduler.update_request(**data['parameters'])
                 elif data['command'].upper() == "GETGROWTHID":
-                    ret = self.growth.get_marshal_id_from_pharos(**data['parameters'])
+                    ret = self.marshals.get_marshal_id_from_pharos(**data['parameters'])
                 elif data['command'].upper() == 'GETTWILIGHTEXPTIME':
                     ret = self.scheduler.get_twilight_exptime(**data['parameters'])
 
             else:
                 ret = {'elaptime': time.time()-starttime,
-                            'error': "Command not found"}
-            jsonstr = json.dumps(ret)
-            connection.sendall(jsonstr.encode('utf-8'))
+                        'error': "Command not found"}
 
+            response = response_handler(ret, inputdata=data,
+                                        starttime=starttime)
+            logger.info("Response: %s", response)
+            jsonstr = json.dumps(response)
+            connection.sendall(jsonstr.encode('utf-8'))
 
     def start(self):
         logger.debug("Sky server now listening for connections on port:%s" % self.port)

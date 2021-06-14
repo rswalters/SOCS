@@ -7,44 +7,50 @@ from astropy.time import Time, TimeDelta
 from astropy.coordinates import SkyCoord, EarthLocation, AltAz
 import astropy.units as u
 import os
-import psycopg2.extras
-import psycopg2
 import time
 from utils import obstimes
-#from utils import sedmpy_import
+from utils.db import dbconnect
 import sqlite3
-from sky.targets.marshals.growth.marshal import interface
+import yaml
+from sky.targets.marshals import interface
 
-SITE_ROOT = os.path.abspath(os.path.dirname(__file__)+'/../..')
-
+# Open the config file
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
 
 # noinspection SqlNoDataSourceInspection
 class Scheduler:
     """
     Nightly scheduler for SEDm. Meant to connect to a back end database
     """
-    def __init__(self, config='schedulerconfig.json',
+    def __init__(self, config='',
                  site_name='Palomar', obsdatetime=None,
                  save_as="targets.json"):
 
         self.scheduler_config_file = config
-        with open(os.path.join(SITE_ROOT, 'config', config)) as data_file:
-            self.params = json.load(data_file)
-        self.path = self.params["standard_db"]
+
+        if not config:
+            self.params = params
+        else:
+            with open(config) as data_file:
+                self.params = json.load(data_file)
+        self.standards_db_path = self.params["standard_db"]
         self.target_dir = self.params["target_dir"]
         self.standard_dict = {}
         self.standard_star_list = []
 
         self.site_name = site_name
-        self.times = obstimes.ScheduleNight()
+        self.times = obstimes.get_science_times()
         self.obs_times = self.times.get_observing_times_by_date()
         self.site = EarthLocation.of_site(self.site_name)
         self.obs_site_plan = astroplan.Observer.at_site(site_name=self.site_name)
         self.obsdatetime = obsdatetime
         self.save_as = save_as
-        self.dbconn = psycopg2.connect(**self.params["dbconn"])
-        self.ph_db = sedmpy_import.dbconnect()
-        self.growth = interface()
+        self.ph_db = dbconnect()
+        self.marshals = interface
+        self.horizon_limit = params['scheduler']['sky']['horizon_limit']
+
         self.query = Template("SELECT r.id AS req_id, r.object_id AS obj_id, \n"
                               "r.user_id, r.marshal_id, r.exptime, r.maxairmass,\n"
                               "r.max_fwhm, r.min_moon_dist, r.max_moon_illum, \n"
@@ -90,24 +96,32 @@ class Scheduler:
                                <td>${rejects}</td>
                                </tr>""")
 
+
     def __load_targets_from_db(self):
         """
         Open the sqlite database of targets
-        pacfic
 
         :return:
         """
-        print(self.path)
-        conn = sqlite3.connect(self.path)
+
+        # Open the connection to the sqlite database containing the standard stars
+        conn = sqlite3.connect(self.standards_db_path)
         cur = conn.cursor()
 
+        # Get all the standards
         results = cur.execute("SELECT * FROM standards")
         standards = results.fetchall()
+
+        # Loop through the standards and create an astroplan object for each
+        # target
         for s in standards:
             name, ra, dec, exptime = s[0].rstrip().encode('utf8'), s[3], s[4], s[5]
 
+            # Skip any unwanted standards
+            # TODO remove these from the standards from the sqlite database
             if name.upper() == 'LB227':
                 continue
+
             coords = SkyCoord(ra=ra, dec=dec, unit='deg')
             obj = astroplan.FixedTarget(name=name, coord=coords)
             self.standard_star_list.append(obj)
@@ -118,33 +132,36 @@ class Scheduler:
                 'exptime': exptime
             }
 
-    def get_standard(self, name=None, obsdate=None):
+    def get_standard(self, name='', obsdate=None):
         """
         If the name is not given find the closest standard star to zenith
-        :param name:
-        :param ra:
-        :param dec:
-        :return:
+
+        :param name: str with name of standard wanted
+        :param obsdate: datetime object
+        :return: dictionary with elapsed time and the closest matching
+                 standard
         """
-        print("Choosing a standard")
+
         start = time.time()
         self.__load_targets_from_db()
+
         if not obsdate:
             obsdate = datetime.datetime.utcnow()
 
         if not name:
             name = 'zenith'
-        print("Finding standard: %s" % name)
+
         if name.lower() == 'zenith':
             sairmass = 100
             for standard in self.standard_star_list:
-                print(standard)
+
                 airmass = self.obs_site_plan.altaz(obsdate, standard).secz
 
                 if airmass < sairmass and airmass > 0:
                     target = standard
                     sairmass = airmass
                     name = target.name
+
         std = self.standard_dict[name]
         std['name'] = std['name'].decode('utf-8')
         return {'elaptime': time.time() - start,
@@ -154,7 +171,7 @@ class Scheduler:
         """
         Parse database target scheme
 
-        :param target:
+        :param row:
         :return:
         """
 
@@ -191,7 +208,6 @@ class Scheduler:
 
         # 3. If the seq list is empty then there is no photmetry follow-up
         # and we should exit
-
         if not seq:
             ifu_total = ifu_exptime
             obs_seq_dict = {
@@ -267,47 +283,82 @@ class Scheduler:
                                      coord=row['SkyCoords'])
 
     def _set_end_time(self, row):
+        """
+        Calculate the end time of an observation by adding the total
+        exposures time to the start time
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return row['start_obs'] + TimeDelta(row['obs_seq']['total'],
                                             format='sec')
 
     def _set_start_altaz(self, row):
+        """
+        Calculate the start altitude and azimuth of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return row['SkyCoords'].transform_to(AltAz(obstime=row['start_obs'],
                                                    location=self.site)).alt
 
     def _set_end_altaz(self, row):
+        """
+        Calculate the end altitude and azimuth of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return row['SkyCoords'].transform_to(AltAz(obstime=row['end_obs'],
                                                    location=self.site)).alt
 
     def _set_start_ha(self, row):
+        """
+        Calculate the start hour angle of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return self.obs_site_plan.target_hour_angle(row['start_obs'],
                                                     row['fixed_object'])
 
     def _set_end_ha(self, row):
+        """
+        Calculate the end hour angle of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return self.obs_site_plan.target_hour_angle(row['end_obs'],
                                                     row['fixed_object'])
 
     def _set_rise_time(self, row):
+        """
+        Calculate the rise time of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
+
         return self.obs_site_plan.target_rise_time(row['start_obs'],
                                                    row['fixed_object'],
-                                                   horizon=15 * u.degree,
+                                                   horizon=self.horizon_limit * u.degree,
                                                    which="next")
 
     def _set_set_time(self, row):
+        """
+        Calculate the set time of a target
+        :param row: dataframe row
+        :return: dataframe column
+        """
         return self.obs_site_plan.target_set_time(row['start_obs'],
                                                   row['fixed_object'],
-                                                  horizon=15 * u.degree,
+                                                  horizon=self.horizon_limit * u.degree,
                                                   which="next")
 
-    def _convert_row_to_json(self, row, fields=('name', 'ra', 'dec',
-                                               'obj_id', 'req_id',
-                                               'email', 'objname', 'pi')):
+    def _convert_row_to_json(self, row):
+        """
+        Convert a dataframe row to a dictionary
+        :param row: dataframe row
+        :return: dict
         """
 
-        :param row:
-        :param fields:
-        :return:
-        """
-
+        # TODO modify this so that we can get other field values
         return dict(name=row.objname, p60prnm=row.name,
                     p60prid=row.p60prid, p60prpi=row.pi,
                     ra=row.ra, dec=row.dec, equinox=row.epoch,
@@ -317,17 +368,21 @@ class Scheduler:
     def simulate_night(self, start_time='', end_time='', do_focus=True,
                        do_standard=True, target_list=None,
                        get_current_observation=True,
-                       return_type='html', sort_columns=('priority', 'start_alt'),
+                       return_type='html',
+                       sort_columns=('priority', 'start_alt'),
                        sort_order=(False, False), ):
         """
+        Simulate the nightly schedule
 
-        :param start_time:
-        :param end_time:
-        :param do_focus:
+        :param get_current_observation:
+        :param return_type:
+        :param sort_columns:
+        :param sort_order:
+        :param target_list: dataframe with all available targets
+        :param start_time: datetime object or None
+        :param end_time: datetime object or None
+        :param do_focus: when doing a focus add 10min to the initial start time
         :param do_standard:
-        :param block_list:
-        :param add_columns:
-        :param save_as:
         :return:
         """
 
@@ -341,8 +396,10 @@ class Scheduler:
         if not end_time:
             end_time = self.obs_times['morning_astronomical']
 
+        # Set the start position
         self.running_obs_time = start_time
 
+        # When a target list is not given try and generate a new one
         if not isinstance(target_list, pd.DataFrame) and not target_list:
             print("Making a new target list")
             ret = self.get_active_targets()
@@ -353,10 +410,9 @@ class Scheduler:
 
             target_list = self.initialize_targets(targets)['data']
 
+        # If there are no targets then return False
         if len(target_list) == 0:
             return {'data': False, 'elaptime': time.time() - start}
-
-        obsdatetime = self.running_obs_time
 
         if return_type == 'html':
             html_str = """<table class='table'><tr><th>Expected Obs Time</th>
@@ -445,21 +501,41 @@ class Scheduler:
                            where_statement="", and_statement="",
                            group_statement="", order_statement="",
                            save_copy=True):
+        """
+        Get all the active targets currently PENDING in the pharos database
+
+        :param startdate:
+        :param enddate:
+        :param where_statement:
+        :param and_statement:
+        :param group_statement:
+        :param order_statement:
+        :param save_copy:
+        :return:
+        """
 
         start = time.time()
 
+        # Get the targets for the current active night.
         if not startdate:
             if datetime.datetime.utcnow().hour >= 14:
-                startdate = (datetime.datetime.utcnow() + datetime.timedelta(days=1))
+                startdate = (datetime.datetime.utcnow() +
+                             datetime.timedelta(days=1))
             else:
                 startdate = datetime.datetime.utcnow()
 
+            # Set the start date to end of the day.  This is to make sure that
+            # we get all the targets for the day no matter what time they
+            # were inserted
             startdate = startdate.replace(hour=23, minute=59, second=59)
 
         if not enddate:
             enddate = (datetime.datetime.utcnow() +
                        datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
+        # If there is no where statement then use the default filtering of
+        # targets by date and object id.  We use greater than 100 do filter
+        # out any calibration targets that may have been added.
         if not where_statement:
             where_statement = ("WHERE r.enddate >= '%s' AND r.object_id > 100 "
                                "AND r.inidate <= '%s'" % (enddate, startdate))
@@ -472,9 +548,7 @@ class Scheduler:
                                   group_statement=group_statement,
                                   order_statement=order_statement)
 
-        self.dbconn = psycopg2.connect(**self.params["dbconn"])
-
-        df = pd.read_sql_query(q, self.dbconn)
+        df = pd.read_sql_query(q, self.ph_db.connect)
 
         if save_copy:
             df.to_csv(self.save_as)
@@ -482,14 +556,28 @@ class Scheduler:
         return {"data": df, "elaptime": time.time() - start}
 
     def initialize_targets(self, target_df, obstime=''):
+        """
+        Given in an input dataframe of targets initialize the sky properties
+        of each target
+
+        :param target_df: pandas dataframe
+        :param obstime: time to initialize the targets against
+        :return:
+        """
+
         start = time.time()
+
+        # Only get targets that have a fixed position
         mask = (target_df['typedesig'] == 'f')
         target_df_valid = target_df[mask]
 
+        # Create an astropy SkyCoord object for each target
         target_df['SkyCoords'] = False
         target_df.loc[mask, 'SkyCoords'] = SkyCoord(ra=target_df_valid['ra'],
                                                     dec=target_df_valid['dec'],
                                                     unit="deg")
+
+        # Calculate the ephemeris times for each target
         target_df['start_obs'] = False
         if not obstime:
             obstime = datetime.datetime.utcnow()
@@ -511,6 +599,7 @@ class Scheduler:
         return {'data': target_df, 'elaptime': time.time() - start}
 
     def update_targets_coords(self, df, obstime=None):
+        """Update the ephemeris data with new times"""
         start = time.time()
         df['start_obs'] = False
 
@@ -529,6 +618,19 @@ class Scheduler:
                              where_statement="", and_statement="",
                              group_statement="", order_statement="",
                              field='req_id'):
+        """
+        Compare existing target list with new targets
+
+        :param df:
+        :param startdate:
+        :param enddate:
+        :param where_statement:
+        :param and_statement:
+        :param group_statement:
+        :param order_statement:
+        :param field:
+        :return:
+        """
 
         start = time.time()
 
@@ -561,7 +663,7 @@ class Scheduler:
         return {'data': df, 'elaptime': time.time() - start}
 
     def get_next_observable_target(self, target_list=None, obsdatetime=None,
-                                   airmass=(1, 2.5), moon_sep=(30, 180),
+                                   airmass=(1, 2.8), moon_sep=(30, 180),
                                    altitude_min=15, ha=(18.75, 5.75),
                                    return_type='', do_airmass=True,
                                    do_sort=True, do_moon_sep=True,
@@ -570,15 +672,37 @@ class Scheduler:
                                    save_as='',
                                    check_end_of_night=True, update_coords=True):
         """
+        Get the next available target to observe.
 
-        :return:
+        :param target_list: list of targets in dataframe format
+        :param obsdatetime: datetime object for the time to set the targets too
+        :param airmass: airmass constraint
+        :param moon_sep: moon separation constraint
+        :param altitude_min: minimum altitude observable by the telescope
+        :param ha: ha range
+        :param return_type: string with type of return expected
+        :param do_airmass: apply airmass constraint
+        :param do_sort: sort the target list
+        :param do_moon_sep: apply moon constraint
+        :param sort_columns: columns to sort by
+        :param sort_order: sort, sort column by ascending (True) or
+                           descending (False)
+        :param save: save the target to a file
+        :param save_as: file path
+        :param check_end_of_night: determine if it is end of the night
+        :param update_coords: update the ephemeris of the dataframe
+        :return: dictionary
         """
 
         s = time.time()
+
         # If the target_list is empty then all we can do is return back no
-        # target and do a standard for the time being
+        # target and do a standard for the time being.
+
+        # TODO find a backup observing program
         next_target = False
 
+        # Check if the target list is valid and has targets
         if not isinstance(target_list, pd.DataFrame) and not target_list:
             print("Making a new target list")
             ret = self.get_active_targets()
@@ -589,62 +713,78 @@ class Scheduler:
 
             target_list = self.initialize_targets(targets)['data']
 
+        # If no target found the return False
         if len(target_list) == 0:
             return {'data': False, 'elaptime': time.time() - s}
 
+        # If obsdatetime is not define then use the current time for the
+        # ephem values
         if not obsdatetime:
             obsdatetime = Time(datetime.datetime.utcnow())
         else:
             obsdatetime = Time(obsdatetime)
 
-        print("Using time:", obsdatetime.iso)
-
+        # Check if the ephem for the targets should be updated
         if update_coords:
-            target_list = self.update_targets_coords(target_list, obsdatetime)['data']
+            target_list = self.update_targets_coords(target_list,
+                                                     obsdatetime)['data']
 
-        # Remove targets outside of HA range
+        # Since we are looking for the highest priority target, sort by that
+        # value first and then by targets that are setting first
         if do_sort:
-            target_list = target_list.sort_values(list(sort_columns), ascending=list(sort_order))
+            target_list = target_list.sort_values(list(sort_columns),
+                                                  ascending=list(sort_order))
+
+        # Set variables
         rej_html = ""
         target_reorder = False
-        print(target_list['typedesig'])
+
+        # Loop through the targets until the first observable target is found
         for row in target_list.itertuples():
             start = obsdatetime
 
             finish = start + TimeDelta(row.obs_seq['total'],
                                        format='sec')
+            # If we are only looking at targets that are priority 2 or below
+            # then reorder the targets by hour angle
             if row.priority <= 2 and not target_reorder:
                 print(target_list.keys())
-                target_list = target_list.sort_values('start_ha', ascending=False)
+                target_list = target_list.sort_values('start_ha',
+                                                      ascending=False)
                 target_reorder = True
                 continue
 
-            # Force altitude constraint
-            constraint = [astroplan.AltitudeConstraint(min=altitude_min * u.deg)]
+            # Force altitude constraint check
+            constraint = [astroplan.AltitudeConstraint(min=altitude_min
+                                                           * u.deg)]
 
+            # Determine other constraints to apply
             if do_airmass:
                 constraint.append(astroplan.AirmassConstraint(min=airmass[0],
-                                                      max=airmass[1]))
-
+                                                              max=airmass[1]))
             if do_moon_sep:
                 constraint.append(astroplan.MoonSeparationConstraint(min=moon_sep[0] * u.degree))
 
+            # Determine if fixed or periodic target
             if row.typedesig == 'f':
-                print(row.objname)
+
+                # Use astroplan to check if the target is currently observable
                 if astroplan.is_observable(constraint, self.obs_site_plan,
                                            row.fixed_object,
                                            times=[start, finish],
                                            time_grid_resolution=0.1 * u.hour):
-                    print(type(row.start_ha))
+
                     s_ha = float(row.start_ha.to_string(unit=u.hour, decimal=True))
                     e_ha = float(row.end_ha.to_string(unit=u.hour, decimal=True))
 
+                    # If the target falls outside the observable hour range for
+                    # the telescope then go on to the next target
                     if 18.75 > s_ha > 5.75:
                         continue
                     if 18.75 > e_ha > 5.75:
                         continue
 
-                    print(row.objname, row.priority, row.ra, row.dec, row.start_ha, row.end_ha, row.start_obs)
+                    # html returns are used for the scheduler webpage
                     if return_type == 'html':
                         if row.obs_seq['rc']:
                             rc_seq = row.obs_seq['rc_obs_dict']['obs_order'],
@@ -669,9 +809,10 @@ class Scheduler:
                                                        'request_id': row.req_id,
                                                        'rejects': rej_html})
                         return row.req_id, (row.obs_seq, html)
+
+                    # JSON returns are for sending target in appropriate
+                    # format for the observing system
                     elif return_type == 'json':
-                        print(rej_html)
-                        print("No Regj")
                         targ = self._convert_row_to_json(row)
 
                         if save:
@@ -687,15 +828,18 @@ class Scheduler:
                     else:
                         return row.req_id, row.obs_seq
                 else:
-                    print("I am here")
+                    # When the target is priority 4 or above we want to know
+                    # why the target is not being observed
                     if row.priority >= 4:
                         count = 1
                         num = []
+
+                        # Go through each constraints and determine which failed
                         for i in constraint:
                             ret = astroplan.is_observable([i], self.obs_site_plan,
                                                        row.fixed_object, times=[start, finish],
                                                        time_grid_resolution=0.1 * u.hour)
-                            print(ret, i)
+
                             if ret:
                                 num.append(str(count))
                             count += 1
@@ -704,11 +848,18 @@ class Scheduler:
                         elif return_type == 'json' and len(num) >= 1:
                             rej_html += ','.join(num)
 
+        # If we made it here then no observable target was found.
         if return_type == 'json':
             return {"elaptime": time.time() - s, "error": "No targets found"}
         return False, False
 
     def get_lst(self, obsdatetime=None):
+        """
+        Get the local sidereal time for a given observation time
+
+        :param obsdatetime: datetime object or None
+        :return: dictionary with elapsed time and lst value
+        """
         start = time.time()
         if obsdatetime:
             self.obsdatetime = obsdatetime
@@ -721,6 +872,11 @@ class Scheduler:
                 "data": lst}
 
     def get_sun(self, obsdatetime=None):
+        """
+        Get the sun angle position for a given observation time
+        :param obsdatetime: datetime object or None
+        :return: dictionary with elapsed time and sun angle value
+        """
         start = time.time()
         if obsdatetime:
             self.obsdatetime = obsdatetime
@@ -736,10 +892,12 @@ class Scheduler:
 
     def get_twilight_coords(self, obsdatetime=None, dec=33.33):
         """
-
-        :param obsdatetime:
+        Get RA and DEC coordinates for twilight flats.  Typical
+        setup is to observe near zenith
+        :param obsdatetime: datetime object for time to calculate the
+                            coordinates
         :param dec:
-        :return:
+        :return: dictionary with elapsed time and data coordinates
         """
         start = time.time()
         if obsdatetime:
@@ -759,9 +917,10 @@ class Scheduler:
 
     def get_twilight_exptime(self, obsdatetime=None, camera='rc'):
         """
+        Calculate the exposure time for the twilight cameras
 
+        :param camera:
         :param obsdatetime:
-        :param dec:
         :return:
         """
         start = time.time()
@@ -793,7 +952,7 @@ class Scheduler:
 
     def get_focus_coords(self, obsdatetime=None, dec=33.33):
         """
-
+        Get the focus coordinates, typically run around zenith
         :param obsdatetime:
         :param dec:
         :return:
@@ -815,14 +974,14 @@ class Scheduler:
 
     def get_standard_request_id(self, name="", exptime=180):
         """
-
+        Create a standard request for archiving
         :param name:
         :param exptime:
         :return: bool, id
         """
         start = time.time()
 
-        object_id = self.ph_db.get_object_id_from_name(name)
+        object_id = self.ph_db.get_object_id(name)
         for obj in object_id:
             if obj[1].lower() == name.lower():
                 object_id = obj[0]
@@ -847,13 +1006,13 @@ class Scheduler:
                         'max_cloud_cover': '1',
                         'seq_repeats': '1',
                         'seq_completed': '0'}
-        request_id = self.ph_db.add_request(request_dict)[0]
+        request_id = self.ph_db.create_request(request_dict)
         return {'elaptime': time.time() - start, 'data': {'object_id': object_id,
                                                           'request_id': request_id}}
 
     def get_calib_request_id(self, camera='ifu', N=1, object_id="", exptime=0):
         """
-
+        Create calibration request for archiving
         :param camera:
         :param N:
         :param object_id:
@@ -889,28 +1048,31 @@ class Scheduler:
                         'seq_repeats': '1',
                         'seq_completed': '0'}
 
-        ret_id = self.ph_db.add_request(request_dict)[0]
+        ret_id = self.ph_db.create_request(request_dict)
 
         return {'elaptime': time.time() - start, 'data': ret_id}
 
-    def update_request(self, request_id, status="PENDING",
-                       check_growth=True):
+    def update_request(self, request_id, status="PENDING", updadte_pharos=True,
+                       check_marshals=True):
         """
+
 
         :param request_id:
         :param status:
         :return:
         """
         start = time.time()
-        ret = self.ph_db.update_request({'id': request_id,
-                                         'status': status})
+        ret = ''
+        # 1. Update on the pharos database first
+        if updadte_pharos:
+            ret = self.ph_db.update_status_request({'id': request_id,
+                                                    'status': status})
 
-        print(ret)
-        if check_growth:
-            ret = self.growth.get_marshal_id_from_pharos(request_id)
-            print(ret)
+        if check_marshals:
+            ret = self.marshals.get_marshal_id_from_pharos(request_id)
+
             if 'data' in ret:
-                ret = self.growth.update_growth_status(growth_id=ret['data'], message=status)
+                ret = self.marshals.update_status_request(status, )
                 print(ret)
             else:
                 return {'elaptime': time.time()-start, 'data': "No growth prescence"}

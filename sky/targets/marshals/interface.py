@@ -11,9 +11,10 @@ with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
     params = yaml.load(data_file, Loader=yaml.FullLoader)
 
 
-def api(method, endpoint, data=None, json_file=None, marshal_id=0):
+def api(method, endpoint, data=None, json_file=None, marshal_id=1):
     """
-    Act as
+    Act as primary method for communicating with the different marshals
+
     :param json_file:
     :param method:
     :param endpoint:
@@ -63,7 +64,7 @@ def get_marshal_id_from_pharos(request_id):
                 'data': ret['marshal_id']}
 
 
-def update_status_request(status, request_id, marshal_name, save=False,
+def update_status_request(status, request_id, marshal_name='', save=False,
                           output_file='', testing=False):
     """
     Function to update the status of any request as long as it has
