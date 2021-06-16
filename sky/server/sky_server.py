@@ -90,7 +90,7 @@ class SkyServer:
 
             else:
                 ret = {'elaptime': time.time()-starttime,
-                        'error': "Command not found"}
+                       'error': "Command not found"}
 
             response = response_handler(ret, inputdata=data,
                                         starttime=starttime)
