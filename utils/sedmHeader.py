@@ -90,7 +90,6 @@ class addHeader():
         n = {}
         for i in self.allkeys:
             n[i] = "NA"
-        #print(n)
 
     def prep_end_header(self, endStatus):
         """
