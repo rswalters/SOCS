@@ -4,6 +4,7 @@ from astropy.io import fits
 from astropy import units as u
 from astropy.coordinates import SkyCoord
 import yaml
+import time
 
 # Open the config file
 SR = os.path.abspath(os.path.dirname(__file__) + '/../')
