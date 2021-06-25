@@ -3,6 +3,12 @@ import os
 from astropy.io import fits
 from astropy import units as u
 from astropy.coordinates import SkyCoord
+import yaml
+
+# Open the config file
+SR = os.path.abspath(os.path.dirname(__file__) + '/../')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
 
 
 def ra_to_deg(ra):
@@ -47,8 +53,8 @@ def set_object_coord(coord=-999, coord_type='ra'):
 class addHeader():
     def __init__(self):
 
-        with open("header.json") as data_file:
-            self.header_params = json.load(data_file)
+        with open(params['setup']['header_json_file']) as df:
+            self.header_params = json.load(df)
         
         self.tcs_keys = self.header_params['tcs_list']
         self.project_keys = self.header_params['prj_list']

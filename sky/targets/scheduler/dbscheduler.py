@@ -15,9 +15,10 @@ import yaml
 from sky.targets.marshals import interface
 
 # Open the config file
-SR = os.path.abspath(os.path.dirname(__file__) + '/../../')
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../../')
 with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
     params = yaml.load(data_file, Loader=yaml.FullLoader)
+
 
 # noinspection SqlNoDataSourceInspection
 class Scheduler:

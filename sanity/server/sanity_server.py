@@ -6,26 +6,21 @@ import time
 import socket
 import threading
 from utils import fileChecker
+import yaml
 
-SITE_ROOT = os.path.abspath(os.path.dirname(__file__)+'/../..')
+from utils.sedmlogging import setup_logger
+from utils.message_server import (message_handler, response_handler,
+                                  error_handler)
 
-with open(os.path.join(SITE_ROOT, 'config', 'logging.json')) as data_file:
-    params = json.load(data_file)
+# Open the config file
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
 
-logger = logging.getLogger("sanityLogger")
-logger.setLevel(logging.DEBUG)
-logging.Formatter.converter = time.gmtime
-formatter = logging.Formatter("%(asctime)s--%(name)s--%(levelname)s--"
-                              "%(module)s--%(funcName)s--%(message)s")
-
-logHandler = TimedRotatingFileHandler(os.path.join(params['abspath'],
-                                                   'sanity_server.log'),
-                                      when='midnight', utc=True, interval=1,
-                                      backupCount=360)
-logHandler.setFormatter(formatter)
-logHandler.setLevel(logging.DEBUG)
-logger.addHandler(logHandler)
-logger.info("Starting Logger: Logger file is %s", 'sanity_server.log')
+# Setup logger
+name = " sanityLogger"
+logfile = os.path.join(params['logging']['logpath'], 'sanity_server.log')
+logger = setup_logger(name, log_file=logfile)
 
 
 class SanityServer:

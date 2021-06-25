@@ -21,25 +21,20 @@ from twilio.rest import Client
 from astropy.time import Time
 import pickle
 
-SITE_ROOT = os.path.abspath(os.path.dirname(__file__))
+from utils.message_server import (message_handler, response_handler,
+                                  error_handler)
+from utils.sedmlogging import setup_logger
+import yaml
 
-with open(os.path.join(SITE_ROOT, 'config', 'logging.json')) as data_file:
-    params = json.load(data_file)
+# Open the config file
+SR = os.path.abspath(os.path.dirname(__file__) + '/')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
 
-logger = logging.getLogger("sedmLogger")
-logger.setLevel(logging.DEBUG)
-logging.Formatter.converter = time.gmtime
-formatter = logging.Formatter("%(asctime)s--%(name)s--%(levelname)s--"
-                              "%(module)s--%(funcName)s--%(message)s")
-
-logHandler = TimedRotatingFileHandler(os.path.join(params['abspath'],
-                                                   'sedm.log'),
-                                      when='midnight', utc=True, interval=1,
-                                      backupCount=360)
-logHandler.setFormatter(formatter)
-logHandler.setLevel(logging.DEBUG)
-logger.addHandler(logHandler)
-logger.info("Starting Logger: Logger file is %s", 'sedm.log')
+# Setup logger
+name = "sedmLogger"
+logfile = os.path.join(params['logging']['logpath'], 'sedm.log')
+logger = setup_logger(name, log_file=logfile)
 
 
 def make_alert_call():
@@ -111,19 +106,19 @@ class SEDm:
         self.required_sciobs_keywords = ['ra', 'dec', 'name', 'obs_dict']
 
         if not configuration_file:
-            configuration_file = os.path.join(SITE_ROOT, 'config', 'sedm.json')
+            configuration_file = os.path.join(SR, 'config', 'sedm_config.yaml')
 
         with open(configuration_file) as data_file:
-            self.params = json.load(data_file)
+            self.params = yaml.load(data_file, Loader=yaml.FullLoader)
 
-        self.base_image_dir = self.params['base_image_dir']
-        self.stop_file = self.params['stop_file']
-        self.stow_profiles = self.params['stow_profiles']
-        self.ifu_ip = self.params['ifu_ip']
-        self.ifu_port = self.params['ifu_port']
-        self.rc_ip = self.params['rc_ip']
-        self.rc_port = self.params['rc_port']
-        self.non_sidereal_dir = self.params['non_sid_dir']
+        self.base_image_dir = self.params['setup']['image_dir']
+        self.stop_file = self.params['commands']['stop_file']
+        self.stow_profiles = self.params['observatory']['tcs']['stow_profiles']
+        self.ifu_ip = self.params['servers']['cameras']['ifu']['ip']
+        self.ifu_port = self.params['servers']['cameras']['ifu']['port']
+        self.rc_ip = self.params['servers']['cameras']['rc']['ip']
+        self.rc_port = self.params['servers']['cameras']['rc']['port']
+        self.non_sidereal_dir = self.params['setup']['non_sid_dir']
         self.directory_made = False
         self.obs_dir = ""
         self.verbose = False
@@ -1448,7 +1443,7 @@ class SEDm:
             return {'elaptime': time.time() - start,
                     'data': ret['data']}
 
-    def run_acquisition_ifumap(self, cam=self.ifu, ra=None, dec=None, equinox=2000,
+    def run_acquisition_ifumap(self, cam, ra=None, dec=None, equinox=2000,
                                ra_rate=0.0, dec_rate=0.0, motion_flag="",
                                exptime=300, readout=2.0, shutter='normal',
                                move=True, name='Simulated', obj_id=-999,
@@ -2279,15 +2274,5 @@ class SEDm:
 if __name__ == "__main__":
     x = SEDm()
     x.initialize()
-    # x.take_datacube_eff()
-    print("Doing test")
-    #ret = x.run_standard_seq(x.ifu, move=False)
-#    ret = x.ocs.stow(**x.stow_profiles['calibrations'])
-    #ret = x.run_manual_command("/home/sedm/SEDMv5/common_files/manual.json")
-    #print(ret)
-
     x.take_bias(x.ifu, N=1, test=' test')
-    # x.take_bias(x.rc, N=1)
 
-#    x.take_twilight(x.ifu, move=False, max_time=10)
-#   x.take_twilight(x.rc, move=False, max_time=10)
