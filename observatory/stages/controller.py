@@ -4,27 +4,18 @@ import time
 import socket
 import os
 import json
+import yaml
+from utils.sedmlogging import setup_logger
 
-SITE_ROOT = os.path.abspath(os.path.dirname(__file__)+'/../..')
+# Open the config file
+SR = os.path.abspath(os.path.dirname(__file__) + '/../../')
+with open(os.path.join(SR, 'config', 'sedm_config.yaml')) as data_file:
+    params = yaml.load(data_file, Loader=yaml.FullLoader)
 
-with open(os.path.join(SITE_ROOT, 'config', 'logging.json')) as data_file:
-    params = json.load(data_file)
-
-logger = logging.getLogger("stageControllerLogger")
-logger.setLevel(logging.DEBUG)
-logging.Formatter.converter = time.gmtime
-formatter = logging.Formatter("%(asctime)s--%(name)s--%(levelname)s--"
-                              "%(module)s--%(funcName)s--%(message)s")
-
-logHandler = TimedRotatingFileHandler(os.path.join(params['abspath'],
-                                                   'stage_controller.log'),
-                                      when='midnight', utc=True, interval=1,
-                                      backupCount=360)
-logHandler.setFormatter(formatter)
-logHandler.setLevel(logging.DEBUG)
-logger.addHandler(logHandler)
-logger.info("Starting Logger: Logger file is %s", 'stage_controller.log')
-
+# Setup logger
+name = "controller"
+logfile = os.path.join(params['logging']['logpath'], 'controller.log')
+logger = setup_logger(name, log_file=logfile)
 
 
 class Stage:
