@@ -1,0 +1,181 @@
+setup:
+  base_dir: "/home/sedm/"
+  image_dir: "/home/sedm/images/"
+  common_files: "/home/sedm/SOCS/common_files/"
+  non_sid_dir: "/home/sedm/SOCS/common_files/nonsid/"
+
+  targets_db:
+    host: "pharos.caltech.edu"
+    port: 5432
+    dbname: "sedmdb"
+    user: "sedmuser"
+    password: "---password---"
+
+  standards_db:
+    path: "/home/sedm/sky/targets/standards/standards.sql"
+
+  offsets:
+    path: "/home/sedm/SOCS/utils/offsets.json"
+
+  header_json_file: "/home/sedm/SOCS/utils/header.json"
+
+ephem:
+  load_file: 'de421.bsp'
+  latitude_degrees: 33.3574
+  longitude_degrees: -116.8599
+  elevation_m: 1703.2
+
+commands:
+  stop_file: "/home/sedm/SOCS/common_files/stop"
+
+cubes:
+  ifu:
+    fast_bias:
+      N: 10
+      exptime: 0
+      readout: 2.0
+    slow_bias:
+      N: 10
+      exptime: 0
+      readout: .1
+    cd:
+      N: 5
+      exptime: 30
+      readout: 2.0
+    hg:
+      N: 5
+      exptime: 30
+      readout: 2.0
+    xe:
+      N: 5
+      exptime: 60
+      readout: 2.0
+    dome:
+      N: 5
+      exptime: 180
+      readout: 2.0
+  rc:
+    fast_bias:
+      N: 10
+      exptime: 0
+      readout: 2.0
+    slow_bias:
+      N: 10
+      exptime: 0
+      readout: .1
+    dome:
+      N: 5
+      exptime: [34,22,11]
+      readout: [0.1, 2.0]
+
+logging:
+  logpath: "/home/sedm/logs/"
+
+header_json_file:
+observatory:
+  tcs:
+    stow_profiles:
+      calibrations:
+        ha: 3.6
+        dec: 50.0
+        domeaz: 40
+      zenith:
+        ha: 0.0
+        dec: 33.33
+        domeaz: 90
+      morning_stow:
+        ha: 0.0
+        dec: 109.0
+        domeaz: 40
+    gxn:
+      ip: "10.200.100.2"
+      port: 49300
+    watcher:
+      ip: "'198.202.125.194'"
+      port: 49300
+  lamps:
+    cd:
+      server:
+        ip: "10.200.155.5"
+        port: 23
+        outlet: 2
+      wait: 420
+    hg:
+      server:
+        ip: "10.200.155.5"
+        port: 23
+        outlet: 1
+      wait: 120
+    xe:
+      server:
+        ip: "198.202.125.234"
+        port: 23
+        outlet: 1
+      wait: 120
+  stages:
+    server:
+      ip: "10.200.155.3"
+      port: 10001
+    expander:
+      position: 1
+    focus:
+      position: 2
+
+servers:
+  cameras:
+    rc:
+      ip: "10.200.155.4"
+      port: 5002
+    ifu:
+      ip: "10.200.155.4"
+      port: 5001
+  sky:
+    ip: "localhost"
+    port: 5004
+  sanity:
+    ip: "localhost"
+    port: 5005
+  observatory:
+    ip: "localhost"
+    port: 5003
+
+sextractor:
+  exec_path: "/usr/bin/sextractor"
+  config_file: "/home/sedm/SOCS/config/sedm_sextractor_config/daofind.sex"
+  default_path: "/home/sedm/image.cat"
+
+scheduler:
+  dbconn:
+    host: "pharos.caltech.edu"
+    port: 5432
+    dbname: "sedmdb"
+    user: "sedmuser"
+    password: "---password---"
+    standard_db: "/home/sedm/SEDMv5/sky/standards/standards.sql"
+    target_dir: "/home/sedm/SEDMv5/sky/targets/"
+
+  sky:
+    horizon_limit: 15
+
+marshals:
+  fritz:
+    status_url: "https://fritz.science/api/facility"
+    token: "--token--"
+    external_id: 2
+    instrument_id: 2
+  growth:
+    status_url: "http://skipper.caltech.edu:8080/cgi-bin/growth/update_followup_status.cgi"
+    user: "rsw"
+    password: "---password---"
+    instrument_id: 65
+    external_id: 1
+
+  pharos:
+    get_marshal_id_url: "http://pharos.caltech.edu/get_marshal_id"
+
+webwatcher:
+  remote_computer: "pharos.caltech.edu"
+  user: "sedm"
+  password: "---password---"
+  remote_path: "/scr2/sedm/raw/telstatus/telstatus.json"
+  local_path: "telstatus.json"
