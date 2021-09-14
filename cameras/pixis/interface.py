@@ -2,7 +2,7 @@ import time
 import datetime
 from cameras.pixis.picamLib import *
 from astropy.io import fits
-#from utils.transfer_to_remote import transfer
+# from utils.transfer_to_remote import transfer
 import yaml
 import os
 from utils.sedmlogging import setup_logger
@@ -48,8 +48,9 @@ class Controller:
         self.parseport = parseport
         self.send_to_remote = send_to_remote
         if self.send_to_remote:
-            self.transfer = None #transfer(**params)
+            self.transfer = None  # transfer(**params)
         self.lastError = ""
+        self.serialNumber = ""
 
     def _set_output_dir(self):
         """
@@ -68,12 +69,14 @@ class Controller:
         shutter_list = []
 
         if shutter in self.shutter_dict:
-            shutter_list.append(['ShutterTimingMode',
-                                 PicamShutterTimingMode[self.shutter_dict[shutter]]])
+            shutter_list.append(
+                ['ShutterTimingMode',
+                 PicamShutterTimingMode[self.shutter_dict[shutter]]])
             shutter_list.append(["ShutterClosingDelay", 0])
             return shutter_list
         else:
-            logger.error('%s is not a valid shutter state', shutter, exc_info=True)
+            logger.error('%s is not a valid shutter state', shutter,
+                         exc_info=True)
             self.lastError = '%s is not a valid shutter state' % shutter
             return False
 
@@ -128,7 +131,8 @@ class Controller:
                     pos = camera_list.index(self.serialNumber)
                 except Exception as e:
                     self.lastError = str(e)
-                    logger.error("Camera %s is not in list", self.serialNumber, exc_info=True)
+                    logger.error("Camera %s is not in list", self.serialNumber,
+                                 exc_info=True)
                     return False
         else:
             logger.info("No serial number given, using demo cam")
@@ -205,7 +209,8 @@ class Controller:
         if self.outputDir:
             if not os.path.exists(self.outputDir):
                 self.lastError = "Image directory does not exists"
-                logger.error("Image directory %s does not exists", self.outputDir)
+                logger.error("Image directory %s does not exists",
+                             self.outputDir)
                 return False
         return True
 
@@ -214,10 +219,10 @@ class Controller:
          on the website"""
         try:
             status = {
-                    'camexptime': self.opt.getParameter("ExposureTime"),
-                    'camtemp': self.opt.getParameter("SensorTemperatureReading"),
-                    'camspeed': self.opt.getParameter("AdcSpeed"),
-                    'state': self.opt.getParameter("OutputSignal")
+                'camexptime': self.opt.getParameter("ExposureTime"),
+                'camtemp': self.opt.getParameter("SensorTemperatureReading"),
+                'camspeed': self.opt.getParameter("AdcSpeed"),
+                'state': self.opt.getParameter("OutputSignal")
             }
             logger.info(status)
             return status
@@ -318,12 +323,13 @@ class Controller:
             # Now make sure the utdate directory exists
             if not os.path.exists(os.path.join(self.outputDir,
                                                start_exp_time[:8])):
-                logger.info("Making directory: %s", os.path.join(self.outputDir,
-                                                                 start_exp_time[:8]))
+                logger.info("Making directory: %s", os.path.join(
+                    self.outputDir, start_exp_time[:8]))
 
                 os.mkdir(os.path.join(self.outputDir, start_exp_time[:8]))
 
-            save_as = os.path.join(self.outputDir, start_exp_time[:8], self.camPrefix+start_exp_time+'.fits')
+            save_as = os.path.join(self.outputDir, start_exp_time[:8],
+                                   self.camPrefix+start_exp_time+'.fits')
 
         try:
             datetimestr = start_time.isoformat()
@@ -332,20 +338,24 @@ class Controller:
             hdu.scale('int16', bzero=32768)
             hdu.header.set("EXPTIME", float(exptime), "Exposure Time in seconds")
             hdu.header.set("ADCSPEED", readout, "Readout speed in MHz")
-            hdu.header.set("TEMP", self.opt.getParameter("SensorTemperatureReading"),
+            hdu.header.set("TEMP",
+                           self.opt.getParameter("SensorTemperatureReading"),
                            "Detector temp in deg C")
             hdu.header.set("GAIN_SET", 2, "Gain mode")
             hdu.header.set("ADC", 1, "ADC Quality")
             hdu.header.set("MODEL", 22, "Instrument Mode Number")
             hdu.header.set("INTERFC", "USB", "Instrument Interface")
-            hdu.header.set("SNSR_NM", "E2V 2048 x 2048 (CCD 42-40)(B)", "Sensor Name")
+            hdu.header.set("SNSR_NM", "E2V 2048 x 2048 (CCD 42-40)(B)",
+                           "Sensor Name")
             hdu.header.set("SER_NO", self.serialNumber, "Serial Number")
             hdu.header.set("TELESCOP", self.telescope, "Telescope ID")
             hdu.header.set("GAIN", self.gain, "Gain")
-            hdu.header.set("CAM_NAME", "%s Cam" % self.camPrefix.upper(), "Camera Name")
+            hdu.header.set("CAM_NAME", "%s Cam" % self.camPrefix.upper(),
+                           "Camera Name")
             hdu.header.set("INSTRUME", "SEDM-P60", "Camera Name")
             hdu.header.set("UTC", start_time.isoformat(), "UT-Shutter Open")
-            hdu.header.set("END_SHUT", datetime.datetime.utcnow().isoformat(), "Shutter Close Time")
+            hdu.header.set("END_SHUT", datetime.datetime.utcnow().isoformat(),
+                           "Shutter Close Time")
             hdu.header.set("OBSDATE", datestr, "UT Start Date")
             hdu.header.set("OBSTIME", timestr, "UT Start Time")
             hdu.header.set("CRPIX1", self.crpix1, "Center X pixel")
@@ -369,14 +379,15 @@ class Controller:
 
 
 if __name__ == "__main__":
-    x = Controller(cam_prefix='ifu', output_dir='/home/rsw/images', send_to_remote=False)
+    x = Controller(cam_prefix='ifu', output_dir='/home/rsw/images',
+                   send_to_remote=False)
     if x.initialize():
         print("Camera initialized")
     else:
         print("I need to handle this error")
         print(x.lastError)
     for i in range(1):
-        #print(y.take_image(exptime=0, readout=2.0))
+        # print(y.take_image(exptime=0, readout=2.0))
         print(x.take_image(exptime=0, readout=2))
     print("I made it here")
     time.sleep(10)
