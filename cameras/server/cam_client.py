@@ -66,7 +66,7 @@ class Camera:
 
 
 if __name__ == '__main__':
-    rc = Camera(address='10.200.155.4', port=5002)
+    rc = Camera(address='localhost', port=5002)
     print(rc.initialize())
     print(rc.take_image(exptime=1, save_as='',
                         return_before_done=False))
