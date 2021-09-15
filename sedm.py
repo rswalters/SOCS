@@ -43,7 +43,7 @@ def make_alert_call():
 
     client = Client(account_sid, auth_token)
 
-    call = client.calls.create(url='http://www.astro.caltech.edu/~rsw/voice.sedm.xml',
+    call = client.calls.create(url='',
                                to='',
                                from_='')
 
